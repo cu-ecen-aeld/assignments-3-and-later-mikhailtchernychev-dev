@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 if [ $# -ne 2 ] ; then
   echo "Should have 2 paramaters  filesdir and searchstr like: " $0 "filesdir searchstr"
