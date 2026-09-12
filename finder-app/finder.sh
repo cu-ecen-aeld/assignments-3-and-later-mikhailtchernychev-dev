@@ -9,10 +9,10 @@ if [ $# -ne 2 ] ; then
  searchstr=$2
 
 
-if [ ! -d $filesdir ]; then
-    echo The file $filesdir is not a directory, stop
-    exit 1
-fi
+#if [ ! -d $filesdir ]; then
+#    echo The file $filesdir is not a directory, stop
+#    exit 1
+#fi
 
 n_files=$(find "$filesdir" -type f  2>/dev/null | wc -l)
 n_matches=$(grep -rl "$searchstr" "$filesdir" | wc -l)
