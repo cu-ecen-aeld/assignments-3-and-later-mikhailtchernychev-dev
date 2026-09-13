@@ -8,7 +8,7 @@ set -u
 NUMFILES=1
 WRITESTR=AELD_IS_FUN
 WRITEDIR=/tmp
-username=$(cat conf/username.txt)
+username=$(cat /etc/finder-app/conf/username.txt)
 
 if [ $# -lt 3 ]
 then
