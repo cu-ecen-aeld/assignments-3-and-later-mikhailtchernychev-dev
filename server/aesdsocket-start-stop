@@ -1,0 +1,27 @@
+#!/bin/sh
+DAEMON="/usr/bin/aesdsocket"
+DAEMON_ARGS="-d"
+PIDFILE="/var/run/aesdsocket.pid"
+
+case "$1" in
+  start)
+    echo "Starting aesdsocket ..."
+    start-stop-daemon -S -m -b -p $PIDFILE -x $DAEMON
+    ;;
+  stop)
+    echo "Stopping aesdsocket..."
+    start-stop-daemon start-stop-daemon -K -p $PIDFILE
+    ;;
+  status)
+    if [ -f "$PIDFILE" ] && kill -0 $(cat "$PIDFILE") 2>/dev/null; then
+       echo "Service is running."
+    else
+       echo "Service is stopped."
+    fi
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|status}"
+    exit 1
+    ;;
+esac
+
