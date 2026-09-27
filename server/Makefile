@@ -1,5 +1,5 @@
-CC=${CROSS_COMPILE}gcc 
-CFLAGS=-Wall -Werror -g
+CC ?= ${CROSS_COMPILE}gcc 
+CFLAGS ?= -Wall -Werror -g
 
 .PHONY: default
 default: all
