@@ -202,6 +202,12 @@ int main(int argc, char ** argv)
 	int yes=1;
 	int rv;
 
+#ifndef USE_AESD_CHAR_DEVICE
+fprintf(stderr,"Using FILE\n");
+#else 
+fprintf(stderr,"Using /dev/aesdchar\n");
+#endif
+
   //fprintf(stderr,"Data file = %s\n", DATA_FILE);
   //exit(0);
 
