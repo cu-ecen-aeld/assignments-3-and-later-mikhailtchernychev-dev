@@ -98,7 +98,6 @@ void* process_connection(void* data) {
     fprintf(output_file2, "%s", buf);
     fflush(output_file2);
     fclose(output_file2);
-    fprintf(stderr,"FILE %p\n=========== written %s", output_file2, buf);
     if (numbytes != MAXBUFLEN - 1) {
       break;
     }
