@@ -21,6 +21,8 @@
 #define BACKLOG 10   // how many pending connections queue will hold
 #define MAXBUFLEN 100
 
+#define USE_AESD_CHAR_DEVICE 1
+
 #ifndef USE_AESD_CHAR_DEVICE
 #define DATA_FILE "/var/tmp/aesdsocketdata"
 pthread_mutex_t file_mutex;
