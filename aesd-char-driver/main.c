@@ -17,6 +17,9 @@
 #include <linux/types.h>
 #include <linux/cdev.h>
 #include <linux/fs.h> // file_operations
+#include <linux/uaccess.h>
+#include <linux/slab.h> // For kvfree
+#include <linux/mm.h>
 #include "aesdchar.h"
 int aesd_major =   0; // use dynamic major
 int aesd_minor =   0;
@@ -32,6 +35,9 @@ int aesd_open(struct inode *inode, struct file *filp)
     /**
      * TODO: handle open
      */
+    filp->private_data =  container_of(inode->i_cdev, struct aesd_dev, cdev);
+    PDEBUG("private data = %p", filp->private_data);
+
     return 0;
 }
 
@@ -41,6 +47,7 @@ int aesd_release(struct inode *inode, struct file *filp)
     /**
      * TODO: handle release
      */
+    //module_put(THIS_MODULE);
     return 0;
 }
 
@@ -49,9 +56,16 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 {
     ssize_t retval = 0;
     PDEBUG("read %zu bytes with offset %lld",count,*f_pos);
-    /**
-     * TODO: handle read
-     */
+    struct aesd_dev * dev = filp->private_data;
+
+    size_t entry_offset_byte_rtn;
+    struct aesd_buffer_entry *current_entry = aesd_circular_buffer_find_entry_offset_for_fpos(&dev->buffer, *f_pos, &entry_offset_byte_rtn); 
+
+    if(current_entry && !copy_to_user(buf, &current_entry->buffptr[entry_offset_byte_rtn], current_entry->size - entry_offset_byte_rtn)) {
+        *f_pos += current_entry->size - entry_offset_byte_rtn;   
+         retval =  current_entry->size - entry_offset_byte_rtn;
+    }
+    PDEBUG("end read %zu bytes with offset %lld %lld",count,*f_pos, entry_offset_byte_rtn);
     return retval;
 }
 
@@ -60,9 +74,42 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 {
     ssize_t retval = -ENOMEM;
     PDEBUG("write %zu bytes with offset %lld",count,*f_pos);
-    /**
-     * TODO: handle write
-     */
+
+    struct aesd_dev * dev = filp->private_data;
+    mutex_lock(&dev->access_lock);
+    PDEBUG("write private data = %p in_offs=%d", dev, dev->buffer.in_offs);
+
+    if(!dev->current_entry.buffptr) {
+        dev->current_entry.buffptr = kmalloc(count, GFP_KERNEL);
+        if(!dev->current_entry.buffptr) {
+            goto end_write;
+        }
+        copy_from_user(dev->current_entry.buffptr, buf, count);
+        dev->current_entry.size = count;
+    } else { // already allocated, append
+        char * tmp_buffer = kmalloc(count +  dev->current_entry.size, GFP_KERNEL);
+        if(!tmp_buffer) {
+             goto end_write;
+        } 
+        memcpy(tmp_buffer, dev->current_entry.buffptr, dev->current_entry.size);
+        copy_from_user(&tmp_buffer[dev->current_entry.size], buf, count);
+        dev->current_entry.size += count;
+        kfree(dev->current_entry.buffptr);
+        dev->current_entry.buffptr = tmp_buffer;
+    }
+
+    // if end command write to circlular buffer 
+    if(dev->current_entry.buffptr[dev->current_entry.size-1] == '\n') {
+        PDEBUG("Line feed detected");
+        aesd_circular_buffer_add_entry(&dev->buffer, &dev->current_entry);
+        dev->current_entry.buffptr = NULL;
+        dev->current_entry.size = 0;
+    }
+    retval =  count;
+    PDEBUG("count return %lld",count);
+
+end_write:
+    mutex_unlock(&dev->access_lock);
     return retval;
 }
 struct file_operations aesd_fops = {
@@ -101,10 +148,14 @@ int aesd_init_module(void)
         return result;
     }
     memset(&aesd_device,0,sizeof(struct aesd_dev));
-
+    PDEBUG("aesd_device = %p", &aesd_device);
     /**
      * TODO: initialize the AESD specific portion of the device
      */
+
+    mutex_init(&aesd_device.access_lock);
+    memset(&aesd_device.current_entry, 0, sizeof(struct aesd_buffer_entry));
+    memset(&aesd_device.buffer, 0, sizeof(struct aesd_circular_buffer));
 
     result = aesd_setup_cdev(&aesd_device);
 
@@ -124,6 +175,21 @@ void aesd_cleanup_module(void)
     /**
      * TODO: cleanup AESD specific poritions here as necessary
      */
+
+    if(aesd_device.current_entry.buffptr) {
+        kfree(aesd_device.current_entry.buffptr);
+        aesd_device.current_entry.buffptr = NULL;
+        PDEBUG("Freed aesd_device.current_entry.buffptr");
+    }
+    int i;
+    for(i=0; i<AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED; i++) {
+        if(aesd_device.buffer.entry[i].buffptr) {
+            kfree(aesd_device.buffer.entry[i].buffptr);
+            aesd_device.buffer.entry[i].buffptr = NULL;
+            PDEBUG("Freed circle buffer entry %d", i);
+        }
+    }
+
 
     unregister_chrdev_region(devno, 1);
 }

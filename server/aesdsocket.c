@@ -21,8 +21,12 @@
 #define BACKLOG 10   // how many pending connections queue will hold
 #define MAXBUFLEN 100
 
-pthread_mutex_t file_mutex;
+#ifndef USE_AESD_CHAR_DEVICE
 #define DATA_FILE "/var/tmp/aesdsocketdata"
+pthread_mutex_t file_mutex;
+#else 
+#define DATA_FILE "/dev/aesdchar"
+#endif
 
 FILE * output_file = NULL;
 
@@ -78,7 +82,9 @@ void* process_connection(void* data) {
 
   int numbytes;
 
+  #ifndef USE_AESD_CHAR_DEVICE
   pthread_mutex_lock(&file_mutex);
+  #endif
 
   while (1) {
     buf[0] = 0;
@@ -88,32 +94,47 @@ void* process_connection(void* data) {
       break;
     }
     buf[numbytes] = 0;
-    fprintf(output_file, "%s", buf);
+    FILE * output_file2 = fopen(DATA_FILE, "wt");
+    fprintf(output_file2, "%s", buf);
+    fflush(output_file2);
+    fclose(output_file2);
+    fprintf(stderr,"FILE %p\n=========== written %s", output_file2, buf);
     if (numbytes != MAXBUFLEN - 1) {
       break;
     }
   }
 
-  fflush(output_file);
+  //fflush(output_file);
   // send data to client
   FILE* in = fopen(DATA_FILE, "rb");
   if (!in) {
     syslog(LOG_ERR, "Cannot open file %s to read", DATA_FILE);
+#ifndef USE_AESD_CHAR_DEVICE
     pthread_mutex_lock(&file_mutex);
+#endif
     return NULL;
   }
+
+   #define CUSTOM_BUFFER_SIZE (64 * 1024)
+    // ugly fix fpos treatment Allocate memory for the stream buffer
+    char *stream_buffer = malloc(CUSTOM_BUFFER_SIZE);
+    setvbuf(in, stream_buffer, _IOFBF, CUSTOM_BUFFER_SIZE);
 
   while (1) {
     int n_read = fread(buf, 1, MAXBUFLEN, in);
     if (send(connection->fd, buf, n_read, 0) == -1) {
       syslog(LOG_ERR, "send() failed %s", strerror(errno));
     }
-    if (feof(in)) {
+    if (n_read==0 || feof(in)) {
       fclose(in);
+      free(stream_buffer); 
       break;
     }
   }
+
+  #ifndef USE_AESD_CHAR_DEVICE
   pthread_mutex_unlock(&file_mutex);
+  #endif
   close(connection->fd);
   free(connection);
   return NULL;
@@ -127,10 +148,14 @@ void timer_callback(union sigval sv) {
     strftime(time_str, sizeof(time_str), "%a, %d %b %Y %T %z", tmp);
     syslog(LOG_INFO, "timestamp = %s, output file=%p", time_str, output_file);
     if(output_file) {
+      #ifndef USE_AESD_CHAR_DEVICE
       pthread_mutex_lock(&file_mutex);
+      #endif
       fprintf(output_file, "timestamp:%s\n", time_str);
       fflush(output_file);
+      #ifndef USE_AESD_CHAR_DEVICE
       pthread_mutex_unlock(&file_mutex);
+      #endif
     }
 }
 
@@ -177,6 +202,10 @@ int main(int argc, char ** argv)
 	struct sockaddr_storage their_addr; // connector's address info
 	int yes=1;
 	int rv;
+
+  //fprintf(stderr,"Data file = %s\n", DATA_FILE);
+  //exit(0);
+
   SLIST_INIT(&g_head);
 
     int is_daemon = 0;
@@ -187,27 +216,33 @@ int main(int argc, char ** argv)
 
     openlog("aesdsocket", LOG_PID | LOG_CONS, LOG_USER);
 
+    #ifndef USE_AESD_CHAR_DEVICE
     unlink(DATA_FILE);
-    output_file = fopen(DATA_FILE, "wt");
+    #endif
+    /*output_file = fopen(DATA_FILE, "wt");
     if (!output_file) {
       syslog(LOG_ERR, "Cannot open file %s to write", DATA_FILE);
       exit(0);
-    }
+    }*/
 
+  #ifndef USE_AESD_CHAR_DEVICE
    if (pthread_mutex_init(&file_mutex, NULL) != 0) {
         syslog(LOG_ERR, "File mutex initialization failed");
         return 1;
    }
+   #endif
 
    if (is_daemon && daemon(0, 0) == -1) {
         syslog(LOG_ERR,  "aesdsocket: failed to daemonize\n");
         exit(EXIT_FAILURE);
     }
 
-    if(set_timer()) {
+#ifndef USE_AESD_CHAR_DEVICE   
+   /* if(set_timer()) {
       syslog(LOG_ERR, "Timer initialization failed");
       fclose(output_file);
-    }
+    }*/
+#endif
 
     // set sigint handler
     struct sigaction sa;
@@ -325,8 +360,10 @@ int main(int argc, char ** argv)
         syslog(LOG_INFO, "Joined threads %d", n_threads);
 
         // remove file
-       fclose(output_file);
+       //fclose(output_file);
+       #ifndef USE_AESD_CHAR_DEVICE
        unlink(DATA_FILE);
+       #endif
        timer_delete(timerid);
         syslog(LOG_INFO, "socket server terminated");
         return 0;

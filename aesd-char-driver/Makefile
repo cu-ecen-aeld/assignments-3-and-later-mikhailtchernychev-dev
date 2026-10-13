@@ -10,6 +10,7 @@ else
 endif
 
 EXTRA_CFLAGS += $(DEBFLAGS)
+CFLAGS += -Wno-missing-prototypes
 
 ifneq ($(KERNELRELEASE),)
 # call from kernel build system
@@ -22,6 +23,9 @@ PWD       := $(shell pwd)
 
 modules:
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) modules
+
+install:
+	$(MAKE) -C $(KERNELDIR) M=$(PWD) modules_install
 
 endif
 

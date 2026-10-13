@@ -10,6 +10,7 @@
 
 #ifdef __KERNEL__
 #include <linux/string.h>
+#include <linux/printk.h>
 #else
 #include <string.h>
 #endif
@@ -35,12 +36,14 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
 
     size_t len = 0;
     struct aesd_buffer_entry * entry;
-
-    for(int i = buffer->out_offs; i!=buffer->in_offs || buffer->full;) {
+    int i;
+    for(i = buffer->out_offs; i!=buffer->in_offs || buffer->full;) {
         entry = &buffer->entry[i]; 
         len += entry->size;
+        printk("len %lld  entry size %lld", len, entry->size);
         if(len > char_offset) {
             *entry_offset_byte_rtn = char_offset - (len-entry->size);
+            printk("Char offset %lld  entry size %lld", char_offset, len-entry->size);
             return entry;
         } 
         i = (i+1) %  AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;   
