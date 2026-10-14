@@ -116,11 +116,6 @@ void* process_connection(void* data) {
     return NULL;
   }
 
-   #define CUSTOM_BUFFER_SIZE (64 * 1024)
-    // ugly fix fpos treatment Allocate memory for the stream buffer
-    char *stream_buffer = malloc(CUSTOM_BUFFER_SIZE);
-    setvbuf(in, stream_buffer, _IOFBF, CUSTOM_BUFFER_SIZE);
-
   while (1) {
     int n_read = fread(buf, 1, MAXBUFLEN, in);
     if (send(connection->fd, buf, n_read, 0) == -1) {
@@ -128,7 +123,6 @@ void* process_connection(void* data) {
     }
     if (n_read==0 || feof(in)) {
       fclose(in);
-      free(stream_buffer); 
       break;
     }
   }

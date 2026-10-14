@@ -61,10 +61,19 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
     size_t entry_offset_byte_rtn;
     struct aesd_buffer_entry *current_entry = aesd_circular_buffer_find_entry_offset_for_fpos(&dev->buffer, *f_pos, &entry_offset_byte_rtn); 
 
-    if(current_entry && !copy_to_user(buf, &current_entry->buffptr[entry_offset_byte_rtn], current_entry->size - entry_offset_byte_rtn)) {
-        *f_pos += current_entry->size - entry_offset_byte_rtn;   
-         retval =  current_entry->size - entry_offset_byte_rtn;
+    if(current_entry) {
+        if(current_entry->size - entry_offset_byte_rtn <= count) {
+            copy_to_user(buf, &current_entry->buffptr[entry_offset_byte_rtn], current_entry->size - entry_offset_byte_rtn);
+            *f_pos += current_entry->size - entry_offset_byte_rtn;   
+            retval =  current_entry->size - entry_offset_byte_rtn;
+        } else {
+            copy_to_user(buf, &current_entry->buffptr[entry_offset_byte_rtn], count);
+            retval = count;
+            *f_pos += count;
+        }
     }
+
+
     PDEBUG("end read %zu bytes with offset %lld %lld",count,*f_pos, entry_offset_byte_rtn);
     return retval;
 }
