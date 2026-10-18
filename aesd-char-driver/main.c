@@ -21,6 +21,8 @@
 #include <linux/slab.h> // For kvfree
 #include <linux/mm.h>
 #include "aesdchar.h"
+#include "aesd_ioctl.h"
+
 int aesd_major =   0; // use dynamic major
 int aesd_minor =   0;
 
@@ -37,7 +39,7 @@ int aesd_open(struct inode *inode, struct file *filp)
      */
     filp->private_data =  container_of(inode->i_cdev, struct aesd_dev, cdev);
     PDEBUG("private data = %p", filp->private_data);
-
+    PDEBUG("Offset = %d", filp->f_pos);
     return 0;
 }
 
@@ -121,12 +123,72 @@ end_write:
     mutex_unlock(&dev->access_lock);
     return retval;
 }
+
+static loff_t aesd_llseek(struct file *filp, loff_t offset, int whence) {
+    loff_t newpos;
+    PDEBUG("llseek called");
+    size_t entry_offset_byte_rtn;
+    struct aesd_dev * dev = filp->private_data;
+
+    switch(whence) {
+        case SEEK_SET:
+            newpos = offset;
+            break;
+        case SEEK_CUR:
+            newpos = filp->f_pos + offset;
+            break;
+        case SEEK_END:
+            PDEBUG("------------- SEEK_END");
+            //newpos = MY_DEVICE_SIZE + offset;
+            break;
+        default:
+            return -EINVAL;
+    }
+
+    struct aesd_buffer_entry *current_entry = aesd_circular_buffer_find_entry_offset_for_fpos(&dev->buffer, newpos, &entry_offset_byte_rtn);
+    if(!current_entry) {
+        return -EINVAL;
+    }
+
+    filp->f_pos = newpos;
+    PDEBUG("llseek new position %u", newpos);
+    return newpos;
+}
+
+static long aesd_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+{
+    PDEBUG("called aesd_ioctl");
+    switch (cmd) {
+        struct aesd_seekto seekto;
+        case AESDCHAR_IOCSEEKTO:
+        if(copy_from_user(&seekto, (const void __user *)arg, sizeof(seekto)) !=0) {
+            return EFAULT;
+        } else {
+            PDEBUG("aesd_ioctl: Offsets %d %d", seekto.write_cmd, seekto.write_cmd_offset);
+            struct aesd_dev * dev = filp->private_data;
+            size_t offset;
+            if(!aesd_adjust_file_offset(&dev->buffer, seekto.write_cmd, seekto.write_cmd_offset, &offset)) {
+                filp->f_pos = offset;
+                PDEBUG("New offset %d", filp->f_pos);
+            }
+        }
+
+        break;
+
+        default:
+        return -ENOTTY; 
+    }
+    return 0;
+}
+
 struct file_operations aesd_fops = {
     .owner =    THIS_MODULE,
     .read =     aesd_read,
     .write =    aesd_write,
     .open =     aesd_open,
     .release =  aesd_release,
+    .llseek  =  aesd_llseek,
+    .unlocked_ioctl =  aesd_ioctl,
 };
 
 static int aesd_setup_cdev(struct aesd_dev *dev)

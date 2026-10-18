@@ -15,6 +15,7 @@
 #include <time.h>
 #include <bits/types/timer_t.h>
 #include <sys/queue.h>
+#include "../aesd-char-driver/aesd_ioctl.h"
 
 #define PORT "9000"  // the port users will be connecting to
 
@@ -88,14 +89,27 @@ void* process_connection(void* data) {
   pthread_mutex_lock(&file_mutex);
   #endif
 
+  int is_command = 0;
+  size_t n_command, n_offset;
+
   while (1) {
     buf[0] = 0;
+    is_command =0;
     if ((numbytes = recvfrom(connection->fd, buf, MAXBUFLEN - 1, 0,
                              (struct sockaddr*)&connection->their_addr, &connection->sin_size)) == -1) {
       syslog(LOG_ERR, "recvfrom() failed %s", strerror(errno));
       break;
     }
     buf[numbytes] = 0;
+
+    if(strncmp(buf, "AESDCHAR_IOCSEEKTO:",19) == 0) {
+        if(2==sscanf(&buf[19],"%lu,%lu", &n_command, &n_offset)) {
+          is_command =1;
+          fprintf(stderr,"AESDCHAR_IOCSEEKTO: %lu %lu\n", n_command, n_offset);
+          break;
+        }
+    }
+
     FILE * output_file2 = fopen(DATA_FILE, "wt");
     fprintf(output_file2, "%s", buf);
     fflush(output_file2);
@@ -116,9 +130,22 @@ void* process_connection(void* data) {
     return NULL;
   }
 
+  if (is_command) {
+    struct aesd_seekto seekto;
+    seekto.write_cmd = n_command;
+    seekto.write_cmd_offset = n_offset;
+
+    if (ioctl(fileno(in), AESDCHAR_IOCSEEKTO, &seekto) < 0) {
+      syslog(LOG_ERR, "AESDCHAR_IOCSEEKTO failed %s", strerror(errno));
+    } else {
+      fprintf(stderr,"IOCTL Command send\n");
+    }
+  }
+
   while (1) {
     int n_read = fread(buf, 1, MAXBUFLEN, in);
-    if (send(connection->fd, buf, n_read, 0) == -1) {
+    fprintf(stderr,"n_read = %d\n", n_read);
+    if (n_read && send(connection->fd, buf, n_read, 0) == -1) {
       syslog(LOG_ERR, "send() failed %s", strerror(errno));
     }
     if (n_read==0 || feof(in)) {

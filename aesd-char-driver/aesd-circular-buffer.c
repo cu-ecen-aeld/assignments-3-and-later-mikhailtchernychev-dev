@@ -40,10 +40,10 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
     for(i = buffer->out_offs; i!=buffer->in_offs || buffer->full;) {
         entry = &buffer->entry[i]; 
         len += entry->size;
-        printk("len %lld  entry size %lld", len, entry->size);
+        //printk("len %lld  entry size %lld", len, entry->size);
         if(len > char_offset) {
             *entry_offset_byte_rtn = char_offset - (len-entry->size);
-            printk("Char offset %lld  entry size %lld", char_offset, len-entry->size);
+            //printk("Char offset %lld  entry size %lld", char_offset, len-entry->size);
             return entry;
         } 
         i = (i+1) %  AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;   
@@ -53,6 +53,33 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
     }
 
     return NULL;
+}
+
+
+long aesd_adjust_file_offset(struct aesd_circular_buffer *buffer, size_t ncmd, size_t position, size_t * offset) {
+   if(ncmd > AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED) {
+    return -1;
+   }
+
+    size_t len = 0;
+    struct aesd_buffer_entry * entry;
+    int i;
+    for(i = buffer->out_offs; i!=buffer->in_offs || buffer->full;) {
+        entry = &buffer->entry[i]; 
+        if(i==ncmd) {
+            if(position > entry->size) {
+                return -1;
+            }
+           *offset = len + position;
+           return 0;
+        }
+        len += entry->size;
+        i = (i+1) %  AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
+        if(i == buffer->out_offs) {
+            break;
+        }
+    }
+    return -1;
 }
 
 /**
