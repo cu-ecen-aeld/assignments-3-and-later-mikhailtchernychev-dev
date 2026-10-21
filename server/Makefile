@@ -1,5 +1,7 @@
-CC ?= ${CROSS_COMPILE}gcc 
-CFLAGS += -Wall -Werror -g 
+CC = ${CROSS_COMPILE}gcc 
+CFLAGS += -Wall -Werror -g -Wno-unused-result
+
+$(info CC=${CC})
 
 .PHONY: default
 default: all
