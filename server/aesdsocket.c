@@ -56,7 +56,7 @@ void handle_sigint(int sig) {
     // Note: It is only safe to call async-signal-safe functions here.
     // write() is safe; printf() is technically NOT safe inside a handler.
     const char msg[] = "\nCaught SIGINT (Ctrl+C). Exiting cleanly...\n";
-    write(STDOUT_FILENO, msg, sizeof(msg) - 1);
+    (void)write(STDOUT_FILENO, msg, sizeof(msg) - 1);
     syslog(LOG_INFO, "Caught signal,exiting");
     // Perform cleanup if necessary, then exit
     is_exit = 1;
