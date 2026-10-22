@@ -25,9 +25,7 @@ modules:
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) modules
 
 install:
-	$(MAKE) -C $(KERNELDIR) M=$(PWD) modules_install
-
-modules_install:
+	@echo "--- executing modules_install..."
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) modules_install
 
 endif
